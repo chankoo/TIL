@@ -35,7 +35,7 @@
 - Content-Length: 응답의 사이즈
 - Content-Type: 응답의 타입
 
-## HTTPS(HTTP Sequre)
+## HTTPS
 - HTTPS 혹은 SSL
 - HTTP를 암호화
 
