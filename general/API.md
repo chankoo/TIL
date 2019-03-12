@@ -16,9 +16,9 @@
   - 정보의 자원: URL
   - 행위: HTTP Method
   - 표현
-- URI은 정보의 자원을 표현해야 한다
-    - `GET /members/delete/1` 이 아니라
-    - `DELETE /members.1`이 맞는 표현
+- URI은 정보의 자원만을 표현해야 한다. 즉 행위는 method에만 표현되어야 한다
+    - 즉, `GET /members/delete/1` 이 아니라
+    - `DELETE /members/1`이 맞는 표현
 
 ![rest](https://user-images.githubusercontent.com/38183218/54192780-179b1e80-44fc-11e9-8ac0-8b0f234ce801.PNG)
 
