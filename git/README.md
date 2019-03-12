@@ -1,1 +1,1 @@
-https://git-scm.com/book/ko/v2
+[Pro Git book, written by Scott Chacon and Ben Straub ](https://git-scm.com/book/ko/v2)
