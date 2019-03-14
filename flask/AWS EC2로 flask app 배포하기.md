@@ -71,7 +71,9 @@
   - '새 키 페어 생성'에서 임의로 이름을 주고 키 페어를 다운로드 받는다
 
 
-## 파이참에서 Deploy
+
+
+## ~~파이참에서 Deploy~~
 - Settings -> Build, Execution, Deployment -> Deployment 선택
 - '+' 눌러 서버를 추가하자
 > ![deploy1](https://user-images.githubusercontent.com/38183218/54301323-1227fc00-4602-11e9-92a5-b3c770dcf8b3.PNG)
@@ -81,10 +83,10 @@
 
   - SFTP host: DNS나 IP 입력
   - Root Path: 접속시 루트 디렉토리 위치
-  - User name: 접속시 사용자 이름
+  - User name: 접속시 사용자 이름(Ubuntu AMI 의 경우 __ubuntu__)
   - Auth type: Key pair 선택하고 다운 받은 pem 파일을 선택
 - Mappings Tab
   - ![dep2](https://user-images.githubusercontent.com/38183218/54301324-1227fc00-4602-11e9-9aaa-35fcf5582455.PNG)
   - 동기화할 프로젝트 경로를 지정
-  - 두번째 항목인 'Deployment path on server'에 배포할 위치를 적어주자
+  - 두번째 항목인 'Deployment path on server'에 배포할 위치를 적어주자(`/` 인 경우 자동으로 `/home/ubuntu`를 잡아준다)
 - 마지막으로 Tools -> Deployment -> Browse Remote Host를 선택하면 우측에 원격 서버의 디렉토리 정보가 나타나게 된다
