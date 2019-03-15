@@ -1,75 +1,239 @@
-#### 19.03.13
+#### 19.03.15
+
+## 개요
+AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰는 flask app을 배포해보자
 
 ## Keywords
 
-가상환경, pip freeze, git-lfs, AWS EC2
-
-
-## 파이썬 가상환경
-
-- 기존에 설치된 파이썬과 격리된 환경을 제공함으로써 기존 라이브러리의 의존성없이 개발 환경을 설정
-- 종류
-  - venv
-  - virtualenv
-  - conda
-  - pyenv
-- ~~파이참이 생성한 flask 프로젝트는 [venv](https://docs.python.org/ko/3/library/venv.html#module-venv) 모듈을 사용(?)~~
-
-
-### 예제 프로젝트의 디렉토리 구조(윈도우)
-
-- exhibition-search-web-dev
-  - | -- app.py
-  - | -- static
-  - | -- templates
-  - | -- venv
-    - |-- Include
-    - |-- Lib
-    - |-- Scripts
-  
-- `venv\Scripts\activate.bat` 으로 가상환경을 실행한다
-- Unix나 Mac에서는 `source venv/bin/activate`
-
-> __pip-freeze__
-> 
-> 가상환경에서 pip freeze는 설치된 패키지의 목록을 만든다
-> 일반적으로 `(venv) $pip freeze > requirements.txt` 로 파일에 입력한다
-
-
-## git-lfs
-- 우선 로컬에서 개발한 flask 프로젝트를 github에 업로드 해보자
-- 해당 프로젝트의 경우 100MB 이상 파일을 github에 push해야 했다(파일 db). 이 경우 일반적인 방법으로는 push가 안된다
-- commit 과정에서 지정한 파일을 작게 조각내는 git extension인 [git-lfs](https://git-lfs.github.com) 를 설치하자
-- 적용하려는 repo 경로에서 `git lfs install`
-- 그다음 용량이 큰 파일을 git-lfs의 관리 대상으로 등록해준다
-- `git lfs track "*.db"`
-- `git commit -m "Large file included"`
-- 이제는 push 가능하다
-- 그런데 기존에 100MB 이상의 파일을 Commit한 적이 있다면 여전히 100MB 이상의 파일을 올릴 수 없다는 경고 메시지를 보게 된다
-- 그럴 땐 [BFG Repo-Cleaner](https://rtyley.github.io/bfg-repo-cleaner/) 를 이용해 기존 커밋에서 100mb보다 큰 파일의 로그를 강제로 없애주자
-- 공식 사이트에서 bfq-x.x.x.jar를 받고, 대상이 되는 Repository에서 `java -jar bfg-x.x.x.jar --strip-blobs-bigger-than 100M` 명령 실행
-- 그런 후에 push를 다시 시도 하면 성공한다
-
+*AWS EC2, SSH, uWSGI, Nginx, nohup*
 
 ## AWS EC2 인스턴스 생성
 1. AMI는 Ubuntu 16.04 LTS
 2. type은 12micro
-3. free-tier는 storage 30gb까지 제공한다 30gb로 설정
+3. free-tier는 storage 30gb까지 제공한다.
 4. Tag
    - 인스턴스의 역할과 관리자 등을 입력 가능
-
 5. Security Group
    - 내부 방화벽과 비슷한 보안 관련 설정
    - 현재 설정된 값이 없으므로 '새 보안 그룹 생성' 선택
    - 차례로 해당 security group의 이름과 설명을 입력하면 된다
    - 아래의 테이블이 직접적인 네트워크 접근에 대한 설정을 하는 부분
    - 인스턴스를 웹서버로 이용하기 위해서 SSH를 허용하고, HTTP에 대해서 80번 포트를 열어주자
-   - Source는 모든 타입의 외부 접근을 허용하는 Anywhere를 사용
+   - 또한 flask app을 위해 5000번 포트를 열어준다
+   - Source는 모든 타입의 외부 접근을 허용하는 '위치 무관'을 사용
 
 6. 키 페어 선택 또는 생성
   - EC2 인스턴스 접속을 위한 키 쌍
   - '새 키 페어 생성'에서 임의로 이름을 주고 키 페어를 다운로드 받는다
 
+## EC2 인스턴스에 연결(ubuntu, SSH)
+- 인스턴스에 접속할 사용자 이름을 찾아놓자. `ubuntu`이다
+- 인스턴스를 생성할때 받은 pem 파일의 경로를 찾는다(`/path/my-key-pair.pem`)
+- `chmod 400 /path/exhb-ubuntu.pem` 로 사용자만 접근가능하게한다
+- `ssh -i "exhb-ubuntu.pem" ubuntu@ec2-13-124-211-10.ap-northeast-2.compute.amazonaws.com`로 접속한다
+
+## 서버 환경 설정
+
+[참고: How To Serve Flask Applications with uWSGI and Nginx on Ubuntu 16.04](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-16-04)
+
+파이썬 설치 > 가상환경 설정 > uwsgi 설정 > nginx 설정 순으로 단계별로 진행
+
+-----------------------------------------
+  [리눅스 버전 확인]
+  
+  `$ cat /etc/issue`
+
+-----------------------------------------
+  [파이썬 설치]
+
+  `$ sudo apt-get update`
+
+  `$ sudo apt-get upgrade`
+
+  `$ sudo apt-get install python3-pip python3-dev nginx`
+
+-----------------------------------------
+  [가상환경 설정을 위한 virtualenv 설치]
+  
+  `$ sudo pip3 install virtualenv`
+
+-----------------------------------------
+  [프로젝트 clone 및 가상환경 생성]
+  
+  `$ git clone https://github.com/chankoo/exhibition-search-web-dev.git`
+  
+  `$ cd exhibition-search-web-dev`
+  
+  `$ sudo apt-get install openjdk-8-jdk` # jpype 설치를 위한 jdk install
+
+  `$ rm -r venv` # 기존 가상환경 삭제
+
+  `$ virtualenv venv`
+
+  `$ source venv/bin/activate`
+  
+  `(venv)$ pip install -r requirements.txt` # dependencies 설치
+
+-----------------------------------------
+  [파일(db) 업로드]
+
+  새로운 터미널을 열고
+
+  업로드 하고 싶은 파일이 있는 경로에서 아래의 명령을 수행한다
+
+  $ scp -i ["pem파일 경로"] [업로드할 파일 이름] [ec2-user 계정명]@[ec2 instance의 public DNS]:~/[경로 ]
+
+  `$ scp -i "exhb-ubuntu.pem"  ExhbnRec.db ubuntu@ec2-13-124-211-10.ap-northeast-2.compute.amazonaws.com:~/exhibition-search-web-dev`
+
+----------------------------------------
+  [웹 서버 확인]
+
+> ![스크린샷, 2019-03-15 01-40-35](https://user-images.githubusercontent.com/38183218/54374899-6a730280-46c3-11e9-852b-60dd503e24a6.png)
+>
+> 현재 nginx 웹 서버가 돌고 있다
+> 
+> nginx와 flask app을 잇는 미들웨어인 uWSGI를 이용해 flask app을 서비스해보자
+>
+> [WSGI]: Flask Is Not Your Production Server](https://vsupalov.com/flask-web-server-in-production/) 
+
+--------------------------------------------
+  [uwsgi 설치]
+
+  `(venv) $ pip install uwsgi`
+
+--------------------------------------------
+  [5000번 포트 열고, 실행하기]
+
+  `(venv) $ sudo ufw allow 5000`
+  
+  `(venv) $ python app.py`
+
+--------------------------------------------
+  [WSGI Entry Point 생성하기]
+
+  `(venv) $ nano ~/exhibition-search-web-dev/wsgi.py`
+
+  [wsgi.py 스크립트]
+
+  `from app import app`
+
+  `if __name__=="__main__":`
+      `app.run()`
+
+  [설정 테스트]
+
+  `(venv) $ uwsgi --socket 0.0.0.0:5000 --protocol=http -w wsgi:app`
+
+  entry 포인트인 wsgi에 app이 잘 실행되는지 테스트한다
+
+
+  http://13.124.211.10:5000/ 으로 접속하면 실행이 잘 된다
+  
+  ![gogole](https://user-images.githubusercontent.com/38183218/54380297-73b59c80-46ce-11e9-8590-8dcf26940bb4.png)
+
+  nohup을 이용해 백그라운드에서 실행하고자하면 아래 명령을 이용한다
+
+  `nohup uwsgi --socket 0.0.0.0:5000 --protocol=http -w wsgi:app&`
+
+  본격적으로 uWSGI 설정파일을 생성해보자
+
+--------------------------------------------
+  [uWSGI 설정파일 생성] (아래부터 적용안된 상태)
+
+  deactivate 한 뒤
+
+  `$ vim ~/exhibition-search-web-dev/app.ini`
+  
+  [app.ini 스크립트]
+
+  `[uwsgi]` // uwsgi 헤더로 시작
+
+  `module = wsgi:app` // wsgi.py 파일을 레퍼런스하여 app을 파일내에서 호출할 수 있다
+
+  //다음으로 실행시 마스터 노드에서 시작하고 1개의  work process를 만들게 한다
+
+  `master=true`
+
+  `processes=1`
+
+  //When we were testing, we exposed uWSGI on a network port. However, we're going to be using Nginx to handle actual client connections, which will then pass requests to uWSGI. Since these components are operating on the same computer, a Unix socket is preferred because it is more secure and faster. We'll call the socket `app.sock` and place it in this directory.
+
+  `socket = app.sock`
+
+  // 소켓에 대한 permission을 바꿔줘야한다  We'll be giving the Nginx group ownership of the uWSGI process later on, so we need to make sure the group owner of the socket can read information from it and write to it. We will also clean up the socket when the process stops by adding the "vacuum" option:
+
+  `chmod-socket = 660`
+
+  `vacuum= true`
+
+  `die-on-term=true` //This can help ensure that the init system and uWSGI have the same assumptions about what each process signal means. Setting this aligns the two system components, implementing the expected behavior:
+
+
+--------------------------------------------
+  [systemd Unit file 생성]
+
+  systemd Unit File을 생성해주면 server 부팅 할 때마다 자동으로 uWSGI와 Flaskapp이 실행된다
+
+  `$ sudo nano /etc/systemd/system/app.service`
+
+  [스크립트]
+
+  `[Unit]`
+
+  `Description=uWSGI instance to serve app`
+
+  `After=network.target`
+
+  `[Service]`
+
+  `User=ubuntu`
+
+  `Group=www-data`
+
+  `WorkingDirectory=/home/ubuntu/exhibition-search-web-dev`
+
+  `Environment="PATH=/home/ubuntu/exhibition-search-web-dev/venv/bin"`
+
+  `ExecStart=/home/ubuntu/exhibition-search-web-dev/venv/bin/uwsgi --ini app.ini`
+
+  `[Install]`
+
+  `WantedBy=multi-user.target`
+
+--------------------------------------------
+  [실행 및 활성화]
+  
+  `$ sudo systemctl start app`
+  
+  `$ sudo systemctl enable app`
+
+  [Proxy Requests에 Nginx를 설정]
+
+  `sudo nano /etc/nginx/sites-available/app`
+
+  [링크 설정]
+
+  가상 호스트 설정 파일의 경우 기본적으로 `sites-available` 디렉토리에 위치하며 `sites-enabled` 디렉토리에 심볼릭 링크를 걸어줌으로써 nginx에서 사용하게된다
+
+  `$ sudo ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled`
+
+  [설정한 파일에 대한 문법 체크]
+
+  `$ sudo nginx -t`
+
+  [웹서버 Nginx 재시작]
+
+  `$ sudo systemctl restart nginx`
+
+  [사용하지 않는 5000포트 닫고, Nginx server접속허용하기]
+
+  `$ sudo ufw delete allow 5000`
+
+  `$ sudo ufw allow 'Nginx Full'`
+
+  [코드 수정 후 재시작]
+
+  `$ sudo systemctl restart app`
 
 
 
