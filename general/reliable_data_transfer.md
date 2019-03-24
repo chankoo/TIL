@@ -7,9 +7,11 @@ TCP를 이해하기 위해 신뢰성 있는 데이터 전송을 가능케 하는
 전송계층, Stop and Wait, Pipelining, RDT, GBN, SR
 
 ## 신뢰성 있는 데이터 전송(Reliable Data Transfer)
-__전송계층__ 에서 신뢰성 있는 데이터 전송(RDT)을 담당한다
+(TCP를 이용할 경우) __전송계층__ 에서 신뢰성 있는 데이터 전송(RDT)을 담당한다
 
-여기서 말하는 신뢰성이란 __1) error__ 와 __2) loss__ 를 해결하는 것이다. error는 전송되는 데이터에 손상이 있는 경우를, loss는 목적지까지 데이터가 전달되지 않은 경우를 뜻한다
+여기서 말하는 신뢰성이란 __1) error__ 와 __2) loss__ 를 해결하는 것이다. 
+
+error는 전송되는 데이터에 손상이 있는 경우를, loss는 목적지까지 데이터가 전달되지 않은 경우를 뜻한다
 
 ### Stop and Wait
 - __RDT 1.0__: 하위 계층을 완전히 신뢰할 수 있을때 이용
@@ -46,7 +48,9 @@ __전송계층__ 에서 신뢰성 있는 데이터 전송(RDT)을 담당한다
 ### Pipelining
 RDT 3.0 까지는 모두 Stop and Wait 방식이기에, 한 패킷을 보내고 그에 대한 응답이 올때 까지 기다리는 비효율이 발생한다. 
 
-여러개의 패킷을 묶어 전송할 수 있으면 더 효율적일 것이다. 이때 1)seq number의 범위를 증가시키고 2) sender와 receiver 각각 최소 한 패킷 이상을 버퍼에 저장해야하는 조건을 지키면 pipelining이 가능하다. 여러 패킷이 동시에 전송되기에 각각 유일한 seq number를 가져야하기 때문이다
+여러개의 패킷을 묶어 전송할 수 있으면 더 효율적일 것이다. 
+
+이때 1) seq number의 범위를 증가시키고 2) sender와 receiver 각각 최소 한 패킷 이상을 버퍼에 저장해야하는 조건을 지키면 pipelining이 가능하다. 여러 패킷이 동시에 전송되기에 각각 유일한 seq number를 가져야하기 때문이다
 
 - __GBN__(Go-Back-N)
   - 전송되는 패킷 중 첫번째를 send base라 하고 send base에 대해서만 timeout을 지정한다
@@ -61,5 +65,5 @@ RDT 3.0 까지는 모두 Stop and Wait 방식이기에, 한 패킷을 보내고 
   - GBN과 달리 패킷마다 개별적인 ACK로 응답하고, 패킷 각각에 타이머를 적용한다
   - receiver 쪽에도 buffer를 만든다
   - ![sr](https://user-images.githubusercontent.com/38183218/54877020-97aa7800-4e5c-11e9-9671-0bf80986d4bd.png)
-    - 2번 패킷의 timeout으로 인해 receiver가 순서에 안맞는 3~5번패킷을 받아도 우선 buffer에 저장하고 3~5번 ACK를 보낸다
+    - 2번 패킷의 timeout으로 인해 receiver가 순서에 안맞는 3\~5번패킷을 받더라도, 우선 buffer에 저장하고 3\~5번 ACK를 보낸다
     - 이후 2번 패킷을 재전송받게 되면 2번 ACK를 보내며 버퍼를 비우고(상위계층에 전달하고) 6번으로의 window sliding을 진행한다
