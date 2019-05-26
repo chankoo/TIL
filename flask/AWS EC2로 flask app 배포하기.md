@@ -1,4 +1,5 @@
 #### 19.03.15
+#### 19.05.26
 
 ## 개요
 AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰는 flask app을 배포해보자
@@ -26,19 +27,19 @@ AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰
   - EC2 인스턴스 접속을 위한 키 쌍
   - '새 키 페어 생성'에서 임의로 이름을 주고 키 페어를 다운로드 받는다
 
-## EC2 인스턴스에 연결(ubuntu, SSH)
+### EC2 인스턴스에 연결(ubuntu, SSH)
 - 인스턴스에 접속할 사용자 이름을 찾아놓자. `ubuntu`이다
 - 인스턴스를 생성할때 받은 pem 파일의 경로를 찾는다(`/path/my-key-pair.pem`)
-- `chmod 400 /path/exhb-ubuntu.pem` 로 사용자만 접근가능하게한다
-- `ssh -i "exhb-ubuntu.pem" ubuntu@ec2-13-124-211-10.ap-northeast-2.compute.amazonaws.com`로 접속한다
+- `chmod 400 /path/my-key-pair.pem` 로 사용자만 접근가능하게한다
+- `ssh -i "/path/my-key-pair.pem" ubuntu@<EC2_public_ip>`로 접속한다
 
 ## 서버 환경 설정
-
-[참고: How To Serve Flask Applications with uWSGI and Nginx on Ubuntu 16.04](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-16-04)
 
 파이썬 설치 > 가상환경 설정 > uwsgi 설정 > nginx 설정 순으로 단계별로 진행
 
 -----------------------------------------
+## 파이썬 설치 및 프로젝트 설정
+
   [리눅스 버전 확인]
   
   `$ cat /etc/issue`
@@ -97,21 +98,23 @@ AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰
 > [WSGI]: Flask Is Not Your Production Server](https://vsupalov.com/flask-web-server-in-production/) 
 
 --------------------------------------------
-  [uwsgi 설치]
+### uWSGI 설치 및 설정
 
-  `(venv) $ pip install uwsgi`
+[uwsgi 설치]
+
+  `pip install uwsgi`
 
 --------------------------------------------
   [5000번 포트 열고, 실행하기]
 
-  `(venv) $ sudo ufw allow 5000`
+  `sudo ufw allow 5000`
   
-  `(venv) $ python app.py`
+  `python app.py`
 
 --------------------------------------------
   [WSGI Entry Point 생성하기]
 
-  `(venv) $ nano ~/exhibition-search-web-dev/wsgi.py`
+  `nano ~/exhibition-search-web-dev/wsgi.py`
 
   [wsgi.py 스크립트]
 
@@ -122,7 +125,7 @@ AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰
 
   [설정 테스트]
 
-  `(venv) $ uwsgi --socket 0.0.0.0:5000 --protocol=http -w wsgi:app`
+  `uwsgi --socket 0.0.0.0:5000 --protocol=http -w wsgi:app`
 
   entry 포인트인 wsgi에 app이 잘 실행되는지 테스트한다
 
@@ -138,119 +141,146 @@ AWS EC2 우분투 환경에 Nginx를 웹 서버로, uWSGI를 미들웨어로 쓰
   본격적으로 uWSGI 설정파일을 생성해보자
 
 --------------------------------------------
-  [uWSGI 설정파일 생성] (아래부터 적용안된 상태)
+  [uWSGI 설정파일 생성]
 
-  deactivate 한 뒤
+  deactivate 한 뒤 .ini 파일을 만들어주자
 
-  `$ vim ~/exhibition-search-web-dev/app.ini`
+  `vim ~/exhibition-search-web-dev/app.ini`
   
   [app.ini 스크립트]
 
-  `[uwsgi]` // uwsgi 헤더로 시작
+  ```sh
+  [uwsgi] # uwsgi 헤더로 시작
 
-  `module = wsgi:app` // wsgi.py 파일을 레퍼런스하여 app을 파일내에서 호출할 수 있다
+  http = :5000 # uWSGI가 직접 5000번 통신을 한다. Nginx를 이용할때는 웹 요청을 Nginx가 담당하기에 .ini 파일에서 http 파라미터를 지우자
 
-  //다음으로 실행시 마스터 노드에서 시작하고 1개의  work process를 만들게 한다
+  module = wsgi:app # wsgi.py 파일을 레퍼런스하여 app을 파일내에서 호출할 수 있다
 
-  `master=true`
+  #다음으로 실행시 마스터 노드에서 시작하고 1개의  work process를 만들게 한다
 
-  `processes=1`
+  master=true
+  processes=1
 
-  //When we were testing, we exposed uWSGI on a network port. However, we're going to be using Nginx to handle actual client connections, which will then pass requests to uWSGI. Since these components are operating on the same computer, a Unix socket is preferred because it is more secure and faster. We'll call the socket `app.sock` and place it in this directory.
+  # 다음은 UNIX socket 파일의 위치이다. socket file의 위치를 잡아줘도 되며 localhost와 port를 명시해줘도 된다
 
-  `socket = app.sock`
+  socket = app.sock
 
-  // 소켓에 대한 permission을 바꿔줘야한다  We'll be giving the Nginx group ownership of the uWSGI process later on, so we need to make sure the group owner of the socket can read information from it and write to it. We will also clean up the socket when the process stops by adding the "vacuum" option:
+  chmod-socket = 660 # 소켓에 대한 permission을 바꿔줘야한다 
 
-  `chmod-socket = 660`
 
-  `vacuum= true`
+  vacuum= true # uWSGI를 통해서 생성된 파일들은 삭제하는 옵션
 
-  `die-on-term=true` //This can help ensure that the init system and uWSGI have the same assumptions about what each process signal means. Setting this aligns the two system components, implementing the expected behavior:
+  daemonize=/path/uwsgi.log # 백그라운드로 돌리기 위한 설정이며 log파일을 남길 경로를 지정
 
+  die-on-term=true # This can help ensure that the init system and uWSGI have the same assumptions about what each process signal means. Setting this aligns the two system components, implementing the expected behavior:
+
+  
+  # pidfile=/tmp/linku_backend.pid # process pid
+
+  # newrelic settings
+
+  # enable-threads = true # thread 사용을 앱(uWSGI) 내에서 가능하게 해줍니다.
+
+  # single-interpreter = true # 단일한 python interpreter를 사용하게 하는 옵션입니다.
+
+  # lazy-apps = true # master말고 각각의 worker에(master에서 spawn한 자식들) 앱을 로드하는 설정입니다.
+
+  ```
+  
 
 --------------------------------------------
   [systemd Unit file 생성]
 
   systemd Unit File을 생성해주면 server 부팅 할 때마다 자동으로 uWSGI와 Flaskapp이 실행된다
 
-  `$ sudo nano /etc/systemd/system/app.service`
+  `sudo nano /etc/systemd/system/app.service`
 
-  [스크립트]
+  ```sh
+  [Unit]
 
-  `[Unit]`
+  Description=uWSGI instance to serve app
 
-  `Description=uWSGI instance to serve app`
+  After=network.target
 
-  `After=network.target`
+  [Service]
 
-  `[Service]`
+  User=ubuntu
 
-  `User=ubuntu`
+  Group=www-data
 
-  `Group=www-data`
+  # <project_path> = /home/ubuntu/react-flask-todo/backend
 
-  `WorkingDirectory=/home/ubuntu/exhibition-search-web-dev`
+  WorkingDirectory=/<project_path>
 
-  `Environment="PATH=/home/ubuntu/exhibition-search-web-dev/venv/bin"`
+  Environment="PATH=/<project_path>/venv/bin"
 
-  `ExecStart=/home/ubuntu/exhibition-search-web-dev/venv/bin/uwsgi --ini app.ini`
+  ExecStart=/<project_path>/venv/bin/uwsgi --ini app.ini
 
-  `[Install]`
+  [Install]
 
-  `WantedBy=multi-user.target`
+  WantedBy=multi-user.target
+  ```
 
 --------------------------------------------
   [실행 및 활성화]
   
-  `$ sudo systemctl start app`
+  `sudo systemctl start app`
   
-  `$ sudo systemctl enable app`
+  `sudo systemctl enable app`
+
+
+  ------------------------------------------
+  ### [socket을 이용한 uWSGI와 Nginx 연결]
+  uwsgi 만으로도 서비스는 동작한다. 다만 nginx를 이용하면 1) 보안기능을 확보, 2) static 리소스(css, js, 이미지 파일들)접근이 안정적, 3) 여러 다양한 기능(gzip 등)을 이용할 수 있다(reverse proxy 를 사용한다고 한다)
+
+  uWSGI와 Nginx를 연결하기 위해 Unix socket을 이용한다. 포트보다 socket을 이용하는 것이 더 안전하고 오버헤드가 적다
 
   [Proxy Requests에 Nginx를 설정]
 
-  `sudo nano /etc/nginx/sites-available/app`
+  `nano /etc/nginx/sites-available/default`
+
+  ```sh
+    server {
+          listen  80;
+          server_name <ip or domain>;
+
+          location /myproject {
+                  include uwsgi_params;
+                  uwsgi_pass unix:/home/user/myproject/myproject.sock;
+          }
+    }
+  ```
 
   [링크 설정]
 
   가상 호스트 설정 파일의 경우 기본적으로 `sites-available` 디렉토리에 위치하며 `sites-enabled` 디렉토리에 심볼릭 링크를 걸어줌으로써 nginx에서 사용하게된다
 
-  `$ sudo ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled`
+  `sudo ln -s /etc/nginx/sites-available/app /etc/nginx/sites-enabled`
 
   [설정한 파일에 대한 문법 체크]
 
-  `$ sudo nginx -t`
+  `sudo nginx -t`
 
   [웹서버 Nginx 재시작]
 
-  `$ sudo systemctl restart nginx`
+  `sudo systemctl restart nginx`
 
   [사용하지 않는 5000포트 닫고, Nginx server접속허용하기]
 
-  `$ sudo ufw delete allow 5000`
+  `sudo ufw delete allow 5000`
 
-  `$ sudo ufw allow 'Nginx Full'`
+  `sudo ufw allow 'Nginx Full'`
 
   [코드 수정 후 재시작]
 
-  `$ sudo systemctl restart app`
+  `sudo systemctl restart app`
 
 
 
-## ~~파이참에서 Deploy~~
-- Settings -> Build, Execution, Deployment -> Deployment 선택
-- '+' 눌러 서버를 추가하자
-> ![deploy1](https://user-images.githubusercontent.com/38183218/54301323-1227fc00-4602-11e9-92a5-b3c770dcf8b3.PNG)
-- EC2의 경우 SSH Key를 이용해 암호화된 연결하기에 SFTP 타입을 선택
-- Connection Tab
-  > ![dep1 5](https://user-images.githubusercontent.com/38183218/54301326-12c09280-4602-11e9-9ed8-bf2c2074c787.PNG)
+### References
 
-  - SFTP host: DNS나 IP 입력
-  - Root Path: 접속시 루트 디렉토리 위치
-  - User name: 접속시 사용자 이름(Ubuntu AMI 의 경우 __ubuntu__)
-  - Auth type: Key pair 선택하고 다운 받은 pem 파일을 선택
-- Mappings Tab
-  - ![dep2](https://user-images.githubusercontent.com/38183218/54301324-1227fc00-4602-11e9-9aaa-35fcf5582455.PNG)
-  - 동기화할 프로젝트 경로를 지정
-  - 두번째 항목인 'Deployment path on server'에 배포할 위치를 적어주자(`/` 인 경우 자동으로 `/home/ubuntu`를 잡아준다)
-- 마지막으로 Tools -> Deployment -> Browse Remote Host를 선택하면 우측에 원격 서버의 디렉토리 정보가 나타나게 된다
+- [How To Serve Flask Applications with uWSGI and Nginx on Ubuntu 16.04](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-uwsgi-and-nginx-on-ubuntu-16-04)
+
+- [uWSGI를 이용하여 Nginx에 Flask 연결하기](https://cjh5414.github.io/flask-uwsgi-nginx/)
+
+- [Nginx의 개요](https://whatisthenext.tistory.com/123)
