@@ -1,7 +1,6 @@
 #### 19.07.22
 
 # Domain Driven Design
-
 ## Domain과 Model
 - Domain은 사용자가 SW를 사용하는 대상 영역을 말한다
 - SW의 본질은 (해당 도메인에서)사용자의 문제를 해결하는 것이다
